@@ -1,5 +1,8 @@
 # xdpdump-rs
 
+A packet capture example in Rust using aya.
+In this example DNS responses are dropped and written in a PCAP file.
+
 ## Prerequisites
 
 1. Install bpf-linker: `cargo install bpf-linker`
@@ -28,5 +31,5 @@ cargo xtask build
 ## Run
 
 ```bash
-RUST_LOG=info cargo xtask run
+RUST_LOG=info cargo xtask run -- file.pcap
 ```
