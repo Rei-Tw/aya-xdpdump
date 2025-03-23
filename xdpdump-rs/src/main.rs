@@ -1,7 +1,6 @@
 use anyhow::Context;
 use aya::programs::{Xdp, XdpFlags};
-use aya::{include_bytes_aligned, Bpf};
-use aya_log::BpfLogger;
+use aya_log::EbpfLogger;
 use clap::Parser;
 use log::{debug, info, warn};
 use tokio::signal;
@@ -17,16 +16,19 @@ use tokio::{
     sync::watch,
 };
 
-#[derive(Debug, Parser)]
-struct Opt {
-    #[clap(short, long, default_value = "eth0")]
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = String::from("eth0"))]
     iface: String,
+
+    #[arg(short, long, default_value_t = String::from("out.pcap"))]
     pcap_out: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let opt = Opt::parse();
+    let args = Args::parse();
 
     env_logger::init();
 
@@ -45,25 +47,21 @@ async fn main() -> Result<(), anyhow::Error> {
     // runtime. This approach is recommended for most real-world use cases. If you would
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Bpf::load_file` instead.
-    #[cfg(debug_assertions)]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/debug/xdpdump-rs"
-    ))?;
-    #[cfg(not(debug_assertions))]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/release/xdpdump-rs"
-    ))?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
+    let mut ebpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
+        env!("OUT_DIR"),
+        "/xdpdump-rs"
+    )))?;
+    if let Err(e) = EbpfLogger::init(&mut ebpf) {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program: &mut Xdp = bpf.program_mut("xdpdump_rs").unwrap().try_into()?;
+    let program: &mut Xdp = ebpf.program_mut("xdpdump_rs").unwrap().try_into()?;
     program.load()?;
-    program.attach(&opt.iface, XdpFlags::default())
+    program.attach(&args.iface, XdpFlags::default())
         .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
 
-    let ring_dump = aya::maps::RingBuf::try_from(bpf.take_map("RING_BUF").unwrap()).unwrap();
-    let file_out = File::create(opt.pcap_out.as_str())
+    let ring_dump = aya::maps::RingBuf::try_from(ebpf.take_map("RING_BUF").unwrap()).unwrap();
+    let file_out = File::create(args.pcap_out.as_str())
         .await
         .expect("Error creating file out");
 

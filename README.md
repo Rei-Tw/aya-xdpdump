@@ -5,31 +5,32 @@ In this example DNS responses are dropped and written in a PCAP file.
 
 ## Prerequisites
 
-1. Install bpf-linker: `cargo install bpf-linker`
+1. stable rust toolchains: `rustup toolchain install stable`
+1. nightly rust toolchains: `rustup toolchain install nightly --component rust-src`
+1. (if cross-compiling) rustup target: `rustup target add ${ARCH}-unknown-linux-musl`
+1. (if cross-compiling) LLVM: (e.g.) `brew install llvm` (on macOS)
+1. (if cross-compiling) C toolchain: (e.g.) [`brew install filosottile/musl-cross/musl-cross`](https://github.com/FiloSottile/homebrew-musl-cross) (on macOS)
+1. bpf-linker: `cargo install bpf-linker` (`--no-default-features` on macOS)
 
-## Build eBPF
+## Build & Run
 
-```bash
-cargo xtask build-ebpf
+Use `cargo build`, `cargo check`, etc. as normal. Run your program with:
+
+```shell
+cargo run --release --config 'target."cfg(all())".runner="sudo -E"'
 ```
 
-To perform a release build you can use the `--release` flag.
-You may also change the target architecture with the `--target` flag.
+Cargo build scripts are used to automatically build the eBPF correctly and include it in the
+program.
 
-## Build Userspace
+## Cross-compiling on macOS
 
-```bash
-cargo build
+Cross compilation should work on both Intel and Apple Silicon Macs.
+
+```shell
+CC=${ARCH}-linux-musl-gcc cargo build --package xdpdump-rs --release \
+  --target=${ARCH}-unknown-linux-musl \
+  --config=target.${ARCH}-unknown-linux-musl.linker=\"${ARCH}-linux-musl-gcc\"
 ```
-
-## Build eBPF and Userspace
-
-```bash
-cargo xtask build
-```
-
-## Run
-
-```bash
-RUST_LOG=info cargo xtask run -- file.pcap
-```
+The cross-compiled program `target/${ARCH}-unknown-linux-musl/release/xdpdump-rs` can be
+copied to a Linux server or VM and run there.
